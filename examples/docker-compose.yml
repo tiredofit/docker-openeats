@@ -1,0 +1,84 @@
+version: '2'
+
+services:
+  openeats-app:
+    image: tiredofit/openeats:latest
+    container_name: openeats-app
+    links:
+      - openeats-db
+    volumes:
+      - ./data:/app/data
+      - ./logs:/www/logs
+    environment:
+      - VIRTUAL_HOST=openeats.example.com
+      - VIRTUAL_NETWORK=nginx-proxy
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=openeats.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+
+      - ZABBIX_HOSTNAME=openeats-app
+
+      - DB_HOST=openeats-db
+      - DB_NAME=openeats
+      - DB_USER=openeats
+      - DB_PASS=password
+
+      - ENABLE_SSL_PROXY=FALSE
+      - DEBUG_MODE=FALSE
+
+      - DEMO_MODE=FALSE
+      - APPLICATION_NAME=OpenEats
+       
+      - ADMIN_USER=admin
+      - ADMIN_PASS=openeats
+      - ADMIN_EMAIL=admin@example.com
+
+      - SITE_NAME=openeats.example.com
+    networks:
+      - proxy-tier
+    restart: always
+
+  openeats-db:
+    container_name: openeats-db
+    image: tiredofit/mariadb
+    volumes:
+      - ./db/openeats:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=openeats
+      - MYSQL_USER=openeats
+      - MYSQL_PASSWORD=password
+      - ZABBIX_HOSTNAME=openeats-db
+    networks:
+      - proxy-tier
+    restart: always
+
+  openeats-db-backup:
+    container_name: openeats-db-backup
+    image: tiredofit/db-backup
+    links:
+     - openeats-db
+    volumes:
+      - ./dbbackup:/backup
+    environment:
+      - ZABBIX_HOSTNAME=openeats-db-backup
+      - DB_HOST=openeats-db
+      - DB_TYPE=mariadb
+      - DB_NAME=openeats
+      - DB_USER=openeats
+      - DB_PASS=password
+      - DB_DUMP_FREQ=1440
+      - DB_DUMP_BEGIN=0000
+      - DB_CLEANUP_TIME=8640
+      - COMPRESSION=BZ
+      - MD5=TRUE
+    networks:
+      - proxy-tier
+    restart: always
+
+networks:
+  proxy-tier:
+    external:
+      name: nginx-proxy
+
+

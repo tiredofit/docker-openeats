@@ -1,0 +1,37 @@
+#!/usr/bin/with-contenv bash
+
+while [ ! -f /tmp/state/10-init-gunicorn ]
+do
+  sleep 1
+done
+
+silent() {
+  if [ "$DEBUG_MODE" = "TRUE" ] || [ "$DEBUG_MODE" = "true" ];  then
+    "$@"
+  else
+    "$@" > /dev/null 2>&1
+  fi
+}
+
+if [ "$DEBUG_MODE" = "TRUE" ] || [ "$DEBUG_MODE" = "true" ];  then
+  set -x
+fi
+
+if [ ! -f /tmp/state/10-gunicorn ]; then
+
+	cd /app/api
+	export DJANGO_SETTINGS_MODULE=base.settings
+	export PYTHONPATH=/app/api:$PYTHONPATH
+
+	mkdir -p /tmp/state/
+	echo 'Initialization Complete' >/tmp/state/10-gunicorn
+fi
+
+echo '** [openeats] Starting API server'
+cd /app/api
+source /app/api/.env
+exec gunicorn base.wsgi:application \
+              --name $APPLICATION_NAME \
+              --workers $API_WORKERS \
+              --user=nginx --group=www-data \
+              --bind=0.0.0.0:$API_PORT

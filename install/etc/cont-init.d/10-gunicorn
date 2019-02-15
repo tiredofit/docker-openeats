@@ -1,0 +1,123 @@
+#!/usr/bin/with-contenv bash
+
+silent() {
+  if [ "$DEBUG_MODE" = "TRUE" ] || [ "$DEBUG_MODE" = "true" ];  then
+    "$@"
+  else
+    "$@" > /dev/null 2>&1
+  fi
+}
+
+if [ "$DEBUG_MODE" = "TRUE" ] || [ "$DEBUG_MODE" = "true" ];  then
+  set -x
+fi
+
+### Sanity Test
+  if [ ! -n "$DB_HOST" ]; then
+      echo '** [openeats] ERROR: No Database Host Entered! '
+      exit 1
+  fi
+
+  if [ ! -n "$DB_NAME" ]; then
+      echo '** [openeats] ERROR: No Database Pass Entered! '
+      exit 1
+  fi
+
+  if [ ! -n "$DB_USER" ]; then
+      echo '** [openeats] ERROR: No Database User Entered! '
+      exit 1
+  fi
+
+  if [ ! -n "$DB_PASS" ]; then
+      echo '** [openeats] ERROR: No Database Pass Entered! '
+      exit 1
+  fi
+
+### Set Defaults
+ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+ADMIN_USER=${ADMIN_USER:-admin}
+ADMIN_PASS=${ADMIN_PASS:-openeats}
+DB_PORT=${DB_PORT:-3306}
+SITE_NAME=${SITE_NAME:-openeats.example.com}
+
+### Make sure that DB is accessible
+while true; do
+  mysqlcmd="mysql -u$DB_USER -h$DB_HOST -p$DB_PASS -P$DB_PORT"
+  out="`$mysqlcmd -e "SELECT COUNT(*) FROM information_schema.FILES;" 2>&1`"
+  echo "$out" | grep -E "COUNT|Enter" 2>&1 > /dev/null
+  if [ $? -eq 0 ]; then
+      echo "** [openeats] MariaDB Server '"$DB_HOST"' is available"
+      break
+  fi
+  echo "** [openeats] MariaDB Server '"$DB_HOST"' unavailable. Sleeping a little bit ..."
+  sleep 5
+done
+
+cat <<EOF > /app/api/.env
+## Dynamically Generated Configuration File - All changes will be lost on container restart
+export MYSQL_HOST=$DB_HOST
+export MYSQL_DATABASE=$DB_NAME
+export MYSQL_USER=$DB_USER
+export MYSQL_ROOT_PASSWORD=$DB_PASS
+export MYSQL_PORT=$DB_PORT
+export API_URL=0.0.0.0:$API_PORT
+export API_PORT=$API_PORT
+export DJANGO_SECRET_KEY=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 100 | head -n 1`
+export DJANGO_SETTINGS_MODULE=base.settings
+export DJANGO_DEBUG=False
+export ALLOWED_HOST=$SITE_NAME
+export NODE_URL=$SITE_NAME
+EOF
+
+if [ "$ENABLE_SSL_PROXY" = "TRUE" ] || [ "$ENABLE_SSL_PROXY" = "true" ];  then
+  echo "export HTTP_X_FORWARDED_PROTO=true" >> /app/api/.env
+fi
+
+if [ "$DEBUG_MODE" = "TRUE" ] || [ "$DEBUG_MODE" = "true" ];  then
+  sed -i -e "s/export DJANGO_DEBUG=.*/export DJANGO_DEBUG=True/g" /app/api/.env
+fi
+
+if [ ! -f "/app/data/.installed" ]; then
+  echo "** [openeats] New Installation Detected"
+fi
+
+## Update DB if necessary
+echo "** [openeats] Performing Database Operations - This may take up to 10 minutes..."
+cd /app/api
+source .env
+silent /app/api/manage.py migrate --no-input
+silent /app/api/manage.py collectstatic --no-input
+
+## Check if new install
+if [ ! -f "/app/data/.installed" ]; then
+  ## Add Admin Credentials
+  echo "** [openeats] Creating Admin User and Password"
+  /app/api/manage.py shell -c "from django.contrib.auth.models import User; User.objects.create_superuser('$ADMIN_USER', '$ADMIN_EMAIL', '$ADMIN_PASS')"
+  ## Load Demo Data
+  if [ "$DEMO_MODE" = "TRUE" ] || [ "$DEMO_MODE" = "true" ];  then
+    echo "** [openeats] Demo Mode enabled - Installing Demo Recipes and content"
+    silent /app/api/manage.py loaddata course_data.json
+    silent /app/api/manage.py loaddata cuisine_data.json
+    silent /app/api/manage.py loaddata news_data.json
+    silent /app/api/manage.py loaddata recipe_data.json
+    silent /app/api/manage.py loaddata ing_data.json
+  fi
+  touch /app/data/.installed
+fi
+
+## Custom Overrides
+if [ -d /assets/custom/ ]; then
+  cp -R /assets/custom/* /usr/src/web/
+  echo '** [openeats] Custom files detected. Copying over source code'
+fi
+
+## Rebuild Source
+echo '** [openeats] Building Web Application'
+cd /usr/src/web
+silent yarn start
+cp -R /usr/src/web/build/* /app/web/
+ln -sf /app/data/static /app/web/static-files
+ln -sf /app/data/media /app/web/site-media
+
+chown -R nginx:www-data /app
+touch /tmp/state/10-init-gunicorn
