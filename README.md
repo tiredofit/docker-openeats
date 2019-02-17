@@ -9,7 +9,7 @@
 
 # Introduction
 
-This will build a container for [Freescout](https://open-eats.github.io/) - An open source Recipe Manager.
+This will build a container for [OpenEats](https://open-eats.github.io/) - An open source Recipe Manager.
 
 * Automatically installs and sets up installation upon first start
         
