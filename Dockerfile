@@ -1,4 +1,4 @@
-FROM registry.selfdesign.org/docker/nodejs/10/alpine
+FROM tiredofit/nodejs/10-alpine
 LABEL maintainer="Dave Conroy (dave at tiredofit dot ca)"
 
 ### Set Defaults
