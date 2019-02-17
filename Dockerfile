@@ -1,4 +1,5 @@
 FROM registry.selfdesign.org/docker/nodejs/10/alpine
+LABEL maintainer="Dave Conroy (dave at tiredofit dot ca)"
 
 ### Set Defaults
 ENV OPENEATS_API_VERSION=master \
