@@ -1,4 +1,4 @@
-FROM registry.selfdesign.org/docker/nodejs/11/alpine
+FROM registry.selfdesign.org/docker/nodejs/10/alpine
 
 ### Set Defaults
 ENV OPENEATS_API_VERSION=master \
